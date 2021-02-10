@@ -59,20 +59,7 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
 
     @Override
     public void configure(final WebSecurity web) {
-        web.ignoring().antMatchers(
-                "/VAADIN/**",
-                "/favicon.ico",
-                "/robots.txt",
-                "/manifest.webmanifest",
-                "/sw.js",
-                "/offline-page.html",
-                "/icons/**",
-                "/images/**",
-                "/frontend/**",
-                "/webjars/**",
-                "/h2-console/**",
-                "/frontend-es5/**",
-                "/frontend-es6/**");
+        web.ignoring().antMatchers("/VAADIN/**");
     }
 
     @Bean
