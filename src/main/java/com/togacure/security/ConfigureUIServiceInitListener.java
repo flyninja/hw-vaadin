@@ -5,8 +5,7 @@ import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.server.ServiceInitEvent;
 import com.vaadin.flow.server.VaadinServiceInitListener;
 import lombok.val;
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.apache.shiro.SecurityUtils;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,9 +30,7 @@ public class ConfigureUIServiceInitListener implements VaadinServiceInitListener
     }
 
     private static boolean isUserLoggedIn() {
-        val authentication = SecurityContextHolder.getContext().getAuthentication();
-        return authentication != null
-                && !(authentication instanceof AnonymousAuthenticationToken)
-                && authentication.isAuthenticated();
+        val subject = SecurityUtils.getSubject();
+        return subject != null && subject.isAuthenticated();
     }
 }

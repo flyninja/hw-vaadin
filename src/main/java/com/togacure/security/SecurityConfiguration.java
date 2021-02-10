@@ -1,104 +1,99 @@
 package com.togacure.security;
 
-import com.vaadin.flow.server.ServletHelper;
-import com.vaadin.flow.shared.ApplicationConstants;
-import java.util.stream.Stream;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import java.util.LinkedHashMap;
+import java.util.Objects;
 import lombok.val;
+import org.apache.shiro.authc.AuthenticationException;
+import org.apache.shiro.authc.AuthenticationInfo;
+import org.apache.shiro.authc.AuthenticationToken;
+import org.apache.shiro.authc.SimpleAuthenticationInfo;
+import org.apache.shiro.authc.UnknownAccountException;
+import org.apache.shiro.authc.UsernamePasswordToken;
+import org.apache.shiro.realm.Realm;
+import org.apache.shiro.spring.web.ShiroFilterFactoryBean;
+import org.apache.shiro.web.mgt.DefaultWebSecurityManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.builders.WebSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
-import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 
 /**
  * @author Vitaly Alekseev
  * @since 10.02.2021
  */
-@EnableWebSecurity
 @Configuration
-public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
+public class SecurityConfiguration {
 
-    private static final String LOGIN_PROCESSING_URL = "/login";
     private static final String LOGIN_FAILURE_URL = "/login?error";
     private static final String LOGIN_URL = "/login";
-    private static final String LOGOUT_SUCCESS_URL = "/login";
+    private static final String LOGOUT_URL = "/logout";
 
-    @Override
-    protected void configure(final HttpSecurity http) throws Exception {
-        // Not using Spring CSRF here to be able to use plain HTML for the login page
-        http.csrf().disable()
+    @Bean
+    public ShiroFilterFactoryBean shirFilter(final org.apache.shiro.mgt.SecurityManager securityManager) {
+        val shiroFilterFactoryBean = new ShiroFilterFactoryBean();
+        shiroFilterFactoryBean.setSecurityManager(securityManager);
+        val filterChainDefinitionMap = new LinkedHashMap<String, String>();
 
-                // Register our CustomRequestCache, that saves unauthorized access attempts, so
-                // the user is redirected after login.
-                .requestCache().requestCache(new Cache())
+        filterChainDefinitionMap.put("/VAADIN/**", "anon");
+        filterChainDefinitionMap.put("/favicon.ico", "anon");
+        filterChainDefinitionMap.put("/robots.txt", "anon");
+        filterChainDefinitionMap.put("/manifest.webmanifest", "anon");
+        filterChainDefinitionMap.put("/sw.js", "anon");
+        filterChainDefinitionMap.put("/offline-page.html", "anon");
+        filterChainDefinitionMap.put("/icons/**", "anon");
+        filterChainDefinitionMap.put("/images/**", "anon");
+        filterChainDefinitionMap.put("/frontend/**", "anon");
+        filterChainDefinitionMap.put("/webjars/**", "anon");
+        filterChainDefinitionMap.put("/h2-console/**", "anon");
+        filterChainDefinitionMap.put("/frontend-es5/**", "anon");
+        filterChainDefinitionMap.put("/frontend-es6/**", "anon");
 
-                // Restrict access to application.
-                .and().authorizeRequests()
+        filterChainDefinitionMap.put(LOGOUT_URL, "logout");
 
+        filterChainDefinitionMap.put("/**", "authc");
 
-                // Allow all flow internal requests.
-                .requestMatchers(SecurityConfiguration::isInternalRequest).permitAll()
+        shiroFilterFactoryBean.setLoginUrl(LOGIN_URL);
 
-                // Allow all requests by logged in users.
-                .anyRequest().authenticated()
+        shiroFilterFactoryBean.setSuccessUrl("/");
 
-                // Configure the login page.
-                .and().formLogin().loginPage(LOGIN_URL).permitAll().loginProcessingUrl(LOGIN_PROCESSING_URL)
-                .failureUrl(LOGIN_FAILURE_URL).defaultSuccessUrl("/", true)
+        shiroFilterFactoryBean.setUnauthorizedUrl(LOGIN_FAILURE_URL);
 
-                // Configure logout
-                .and().logout().logoutSuccessUrl(LOGOUT_SUCCESS_URL);
-    }
+        shiroFilterFactoryBean.setFilterChainDefinitionMap(filterChainDefinitionMap);
 
-    @Override
-    public void configure(final WebSecurity web) {
-        web.ignoring().antMatchers(
-                "/VAADIN/**",
-                "/favicon.ico",
-                "/robots.txt",
-                "/manifest.webmanifest",
-                "/sw.js",
-                "/offline-page.html",
-                "/icons/**",
-                "/images/**",
-                "/frontend/**",
-                "/webjars/**",
-                "/h2-console/**",
-                "/frontend-es5/**", "/frontend-es6/**");
+        return shiroFilterFactoryBean;
+
     }
 
     @Bean
-    @Override
-    public UserDetailsService userDetailsService() {
-        val user = User.withUsername("test")
-                .password("{noop}test")
-                .roles("USER")
-                .build();
-        return new InMemoryUserDetailsManager(user);
+    public org.apache.shiro.mgt.SecurityManager securityManager() {
+        val securityManager = new DefaultWebSecurityManager();
+        securityManager.setRealm(new SimpleRealm());
+        return securityManager;
     }
 
-
-    private static boolean isInternalRequest(final HttpServletRequest httpServletRequest) {
-        val parameterValue = httpServletRequest.getParameter(ApplicationConstants.REQUEST_TYPE_PARAMETER);
-        return parameterValue != null && Stream.of(ServletHelper.RequestType.values()).anyMatch(r -> r.getIdentifier().equals(parameterValue));
-    }
-
-
-    private static class Cache extends HttpSessionRequestCache {
+    private static class SimpleRealm implements Realm {
 
         @Override
-        public void saveRequest(HttpServletRequest request, HttpServletResponse response) {
-            if (!isInternalRequest(request)) {
-                super.saveRequest(request, response);
-            }
+        public String getName() {
+            return "test";
         }
 
+        @Override
+        public boolean supports(final AuthenticationToken authenticationToken) {
+            return authenticationToken instanceof UsernamePasswordToken;
+        }
+
+        @Override
+        public AuthenticationInfo getAuthenticationInfo(final AuthenticationToken authenticationToken) throws AuthenticationException {
+            val token = (UsernamePasswordToken) authenticationToken;
+            if (token.getUsername() != null
+                    && !token.getUsername().isEmpty()
+                    && Objects.equals(token.getUsername(), "test")) {
+                return new SimpleAuthenticationInfo(
+                        token.getUsername(),
+                        "test",
+                        getName());
+            }
+            throw new UnknownAccountException("username hasn't been found!");
+        }
     }
+
 }
