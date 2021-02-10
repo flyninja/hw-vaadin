@@ -1,7 +1,11 @@
 package com.togacure.security;
 
+import com.vaadin.flow.shared.ApplicationConstants;
 import java.util.LinkedHashMap;
 import java.util.Objects;
+import javax.servlet.Filter;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
 import lombok.val;
 import org.apache.shiro.authc.AuthenticationException;
 import org.apache.shiro.authc.AuthenticationInfo;
@@ -11,6 +15,9 @@ import org.apache.shiro.authc.UnknownAccountException;
 import org.apache.shiro.authc.UsernamePasswordToken;
 import org.apache.shiro.realm.Realm;
 import org.apache.shiro.spring.web.ShiroFilterFactoryBean;
+import org.apache.shiro.web.filter.authc.AuthenticatingFilter;
+import org.apache.shiro.web.filter.authc.FormAuthenticationFilter;
+import org.apache.shiro.web.filter.mgt.DefaultFilter;
 import org.apache.shiro.web.mgt.DefaultWebSecurityManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,28 +34,16 @@ public class SecurityConfiguration {
     private static final String LOGOUT_URL = "/logout";
 
     @Bean
-    public ShiroFilterFactoryBean shirFilter(final org.apache.shiro.mgt.SecurityManager securityManager) {
+    public ShiroFilterFactoryBean shiroFilterFactoryBean(final org.apache.shiro.mgt.SecurityManager securityManager) {
         val shiroFilterFactoryBean = new ShiroFilterFactoryBean();
         shiroFilterFactoryBean.setSecurityManager(securityManager);
         val filterChainDefinitionMap = new LinkedHashMap<String, String>();
 
-        filterChainDefinitionMap.put("/VAADIN/**", "anon");
-        filterChainDefinitionMap.put("/favicon.ico", "anon");
-        filterChainDefinitionMap.put("/robots.txt", "anon");
-        filterChainDefinitionMap.put("/manifest.webmanifest", "anon");
-        filterChainDefinitionMap.put("/sw.js", "anon");
-        filterChainDefinitionMap.put("/offline-page.html", "anon");
-        filterChainDefinitionMap.put("/icons/**", "anon");
-        filterChainDefinitionMap.put("/images/**", "anon");
-        filterChainDefinitionMap.put("/frontend/**", "anon");
-        filterChainDefinitionMap.put("/webjars/**", "anon");
-        filterChainDefinitionMap.put("/h2-console/**", "anon");
-        filterChainDefinitionMap.put("/frontend-es5/**", "anon");
-        filterChainDefinitionMap.put("/frontend-es6/**", "anon");
+        filterChainDefinitionMap.put("/VAADIN/**", DefaultFilter.anon.name());
 
-        filterChainDefinitionMap.put(LOGOUT_URL, "logout");
+        filterChainDefinitionMap.put(LOGOUT_URL, DefaultFilter.logout.name());
 
-        filterChainDefinitionMap.put("/**", "authc");
+        filterChainDefinitionMap.put("/**", DefaultFilter.authc.name());
 
         shiroFilterFactoryBean.setLoginUrl(LOGIN_URL);
 
@@ -58,15 +53,30 @@ public class SecurityConfiguration {
 
         shiroFilterFactoryBean.setFilterChainDefinitionMap(filterChainDefinitionMap);
 
+        val filters = new LinkedHashMap<String, Filter>();
+        val authc = new FormAuthenticationFilter() {
+            @Override
+            protected boolean isAccessAllowed(final ServletRequest request, final ServletResponse response, final Object mappedValue) {
+                return request.getParameter(ApplicationConstants.REQUEST_TYPE_PARAMETER) != null ? true : super.isAccessAllowed(request, response, mappedValue);
+            }
+        };
+        authc.setLoginUrl(LOGIN_URL);
+        authc.setSuccessUrl("/");
+        filters.put(DefaultFilter.authc.name(), authc);
+        shiroFilterFactoryBean.setFilters(filters);
+
         return shiroFilterFactoryBean;
 
     }
 
     @Bean
-    public org.apache.shiro.mgt.SecurityManager securityManager() {
-        val securityManager = new DefaultWebSecurityManager();
-        securityManager.setRealm(new SimpleRealm());
-        return securityManager;
+    public org.apache.shiro.mgt.SecurityManager securityManager(final Realm simpleRealm) {
+        return new DefaultWebSecurityManager(simpleRealm);
+    }
+
+    @Bean
+    public Realm simpleRealm() {
+        return new SimpleRealm();
     }
 
     private static class SimpleRealm implements Realm {
